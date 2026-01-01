@@ -1,0 +1,167 @@
+services:
+  # ═══════════════════════════════════════════════════════════════════
+  # 1. MLflow Server - Model Tracking & Registry
+  # ═══════════════════════════════════════════════════════════════════
+  mlflow-server:
+    image: ghcr.io/mlflow/mlflow:v2.21.0
+    container_name: mlflow_server
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_data:/mlruns
+      - ./mlruns:/mlruns
+    environment:
+      - MLFLOW_TRACKING_URI=http://0.0.0.0:5000
+    command: >
+      mlflow server 
+      --backend-store-uri sqlite:///mlruns/mlflow.db 
+      --default-artifact-root /mlruns 
+      --host 0.0.0.0
+      --port 5000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - mlops-network
+
+  # ═══════════════════════════════════════════════════════════════════
+  # 2. API Service - Churn Prediction API
+  # ═══════════════════════════════════════════════════════════════════
+  api-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.serving
+    container_name: churn_prediction_api
+    ports:
+      - "8000:8000"
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow-server:5000
+      - MODEL_PATH=/app/model_artifact.joblib
+    volumes:
+      - ./model_artifact.joblib:/app/model_artifact.joblib:ro
+      - model_artifacts:/app/models
+    depends_on:
+      mlflow-server:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - mlops-network
+
+  # ═══════════════════════════════════════════════════════════════════
+  # 3. Training Service - Model Training Job
+  # ═══════════════════════════════════════════════════════════════════
+  training-job:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.training
+    container_name: model_trainer
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow-server:5000
+    volumes:
+      - ./model_artifact.joblib:/app/model_artifact.joblib
+      - model_artifacts:/app/models
+    depends_on:
+      mlflow-server:
+        condition: service_started
+    networks:
+      - mlops-network
+    # This runs once and stops
+    restart: "no"
+    profiles:
+      - training
+
+  # ═══════════════════════════════════════════════════════════════════
+  # 3b. Model Registration Job - Register model to MLflow
+  # ═══════════════════════════════════════════════════════════════════
+  register-model:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.register
+    container_name: model_register
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow-server:5000
+    volumes:
+      - ./model_artifact.joblib:/app/model_artifact.joblib:ro
+    depends_on:
+      mlflow-server:
+        condition: service_started
+    networks:
+      - mlops-network
+    restart: "no"
+    profiles:
+      - register
+
+  # ═══════════════════════════════════════════════════════════════════
+  # 4. Prometheus - Metrics Collection
+  # ═══════════════════════════════════════════════════════════════════
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus_monitor
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./configs/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    depends_on:
+      - api-service
+    restart: unless-stopped
+    networks:
+      - mlops-network
+
+  # ═══════════════════════════════════════════════════════════════════
+  # 5. Grafana - Visualization Dashboard
+  # ═══════════════════════════════════════════════════════════════════
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana_dashboard
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./configs/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - mlops-network
+
+# ═══════════════════════════════════════════════════════════════════
+# Networks
+# ═══════════════════════════════════════════════════════════════════
+networks:
+  mlops-network:
+    driver: bridge
+    name: mlops-network
+
+# ═══════════════════════════════════════════════════════════════════
+# Volumes
+# ═══════════════════════════════════════════════════════════════════
+volumes:
+  mlflow_data:
+    name: mlops_mlflow_data
+  model_artifacts:
+    name: mlops_model_artifacts
+  prometheus_data:
+    name: mlops_prometheus_data
+  grafana_data:
+    name: mlops_grafana_data

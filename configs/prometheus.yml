@@ -1,0 +1,43 @@
+# Prometheus Configuration for MLOps Project
+# ============================================
+
+global:
+  scrape_interval: 15s       # How often to scrape targets
+  evaluation_interval: 15s   # How often to evaluate rules
+  external_labels:
+    monitor: 'mlops-monitor'
+
+# Alertmanager configuration (optional)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Load rules once and periodically evaluate them
+rule_files: []
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    metrics_path: /metrics
+    scheme: http
+
+  # FastAPI Churn Prediction Service
+  - job_name: 'churn-api'
+    static_configs:
+      - targets: ['api-service:8000']
+    metrics_path: /metrics
+    scheme: http
+    scrape_interval: 5s
+    scrape_timeout: 5s
+
+  # MLflow Server (if metrics exposed)
+  - job_name: 'mlflow'
+    static_configs:
+      - targets: ['mlflow-server:5000']
+    metrics_path: /metrics
+    scheme: http
+    scrape_interval: 30s
