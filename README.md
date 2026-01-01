@@ -1,5 +1,5 @@
-# 🚀 MLOps Churn Prediction Project
-
+#  MLOps Churn Prediction Project 
+[![MLOps CI/CD Pipeline](https://github.com/Kutay32/mlops_project/actions/workflows/ci-cd.yml/badge.svg?branch=main)](https://github.com/Kutay32/mlops_project/actions/workflows/ci-cd.yml)
 Complete MLOps implementation for Customer Churn Prediction with ML Design Patterns.
 
 ## 📋 Contents
