@@ -181,7 +181,7 @@ jobs:
           # BURASI SENİN AZURE MAKİNEN İÇİN ÖZELLEŞTİRİLDİ
           script: |
             # 1. Proje klasörüne git
-            cd /home/mlops1/MLOps-Capstone-Project
+            cd /home/mlops1/mlops_project
             
             # 2. Güncel kodları çek
             git pull origin main
