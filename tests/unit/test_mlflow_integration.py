@@ -1,15 +1,18 @@
+from unittest.mock import MagicMock
+
 import pytest
 from sklearn.datasets import make_classification
-from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
-from unittest.mock import MagicMock
+from sklearn.model_selection import train_test_split
 
 from src.models.model_trainer import ModelTrainer
 
 
 @pytest.fixture
 def sample_data():
-    X, y = make_classification(n_samples=200, n_features=10, n_informative=5, n_redundant=0, random_state=42)
+    X, y = make_classification(
+        n_samples=200, n_features=10, n_informative=5, n_redundant=0, random_state=42
+    )
     return train_test_split(X, y, test_size=0.2, random_state=42)
 
 
@@ -38,7 +41,14 @@ def test_model_trainer_mlflow_logging(sample_data, tmp_path):
     trainer.mlflow_sklearn = fake_mlflow_sklearn
 
     # Train a logistic regression
-    metrics = trainer.train_model("logistic_regression", LogisticRegression(max_iter=1000, random_state=42), X_train, y_train, X_test, y_test)
+    metrics = trainer.train_model(
+        "logistic_regression",
+        LogisticRegression(max_iter=1000, random_state=42),
+        X_train,
+        y_train,
+        X_test,
+        y_test,
+    )
 
     # Assertions: MLflow should have been invoked to log params and model
     assert fake_mlflow.start_run.called

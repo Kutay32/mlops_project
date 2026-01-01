@@ -9,8 +9,8 @@ from datetime import datetime
 
 import mlflow
 import mlflow.sklearn
-from mlflow.models.signature import infer_signature
 import pandas as pd
+from mlflow.models.signature import infer_signature
 
 # Add src to path for imports
 sys.path.insert(0, "/app")
