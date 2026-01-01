@@ -5,13 +5,14 @@ Trains and evaluates multiple base models independently with comprehensive metri
 
 import json
 import os
+import tempfile
 import warnings
 from datetime import datetime
+from typing import Optional
 
 import joblib
 import numpy as np
 import pandas as pd
-import tempfile
 from catboost import CatBoostClassifier
 from lightgbm import LGBMClassifier
 from sklearn.ensemble import (
@@ -45,7 +46,12 @@ class ModelTrainer:
     `registered_model_name` (if provided).
     """
 
-    def __init__(self, output_dir: str = "model_artifacts", use_mlflow: bool = False, registered_model_name: str | None = None):
+    def __init__(
+        self,
+        output_dir: str = "model_artifacts",
+        use_mlflow: bool = False,
+        registered_model_name: Optional[str] = None,
+    ):
         self.output_dir = output_dir
         self.models = {}
         self.results = {}
@@ -59,8 +65,8 @@ class ModelTrainer:
             try:
                 import mlflow
                 import mlflow.sklearn
-                from mlflow.tracking import MlflowClient
                 from mlflow.models.signature import infer_signature
+                from mlflow.tracking import MlflowClient
 
                 self.mlflow = mlflow
                 self.mlflow_sklearn = mlflow.sklearn
@@ -203,10 +209,14 @@ class ModelTrainer:
 
                     # Log confusion matrix as JSON artifact
                     try:
-                        cm_path = os.path.join(self.output_dir, f"{name}_confusion_matrix.json")
+                        cm_path = os.path.join(
+                            self.output_dir, f"{name}_confusion_matrix.json"
+                        )
                         with open(cm_path, "w") as f:
                             json.dump(metrics.get("confusion_matrix", []), f)
-                        self.mlflow.log_artifact(cm_path, artifact_path="confusion_matrices")
+                        self.mlflow.log_artifact(
+                            cm_path, artifact_path="confusion_matrices"
+                        )
                     except Exception as e:
                         print(f"  Could not log confusion matrix: {e}")
 
