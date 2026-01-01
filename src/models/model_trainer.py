@@ -8,6 +8,7 @@ import os
 import tempfile
 import warnings
 from datetime import datetime
+from typing import Optional
 
 import joblib
 import numpy as np
@@ -49,7 +50,7 @@ class ModelTrainer:
         self,
         output_dir: str = "model_artifacts",
         use_mlflow: bool = False,
-        registered_model_name: str | None = None,
+        registered_model_name: Optional[str] = None,
     ):
         self.output_dir = output_dir
         self.models = {}
