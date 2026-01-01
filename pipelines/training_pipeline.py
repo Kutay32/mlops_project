@@ -9,6 +9,7 @@ from datetime import datetime
 
 import mlflow
 import mlflow.sklearn
+from mlflow.models.signature import infer_signature
 import pandas as pd
 
 # Add src to path for imports
@@ -189,10 +190,17 @@ def train_model(df: pd.DataFrame):
             mlflow.log_metric("roc_auc", roc_auc)
             mlflow.log_metric("training_time_seconds", training_time)
 
-            # Log model with registration
+            # Infer model signature from training data
+            signature = infer_signature(X_train, y_pred)
+
+            # Log model with registration and signature
             registered_name = f"ChurnModel_{model_name}"
             mlflow.sklearn.log_model(
-                pipeline, "model", registered_model_name=registered_name
+                pipeline,
+                "model",
+                registered_model_name=registered_name,
+                signature=signature,
+                input_example=X_train.head(3),
             )
 
             print(f"  ✓ Accuracy: {accuracy:.4f}")

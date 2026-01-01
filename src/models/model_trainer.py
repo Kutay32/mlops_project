@@ -11,6 +11,7 @@ from datetime import datetime
 import joblib
 import numpy as np
 import pandas as pd
+import tempfile
 from catboost import CatBoostClassifier
 from lightgbm import LGBMClassifier
 from sklearn.ensemble import (
@@ -38,14 +39,36 @@ warnings.filterwarnings("ignore")
 class ModelTrainer:
     """
     Trains multiple base models independently and tracks performance metrics.
+
+    If `use_mlflow=True`, each model training will be logged to MLflow (params, metrics, artifacts)
+    and an attempt will be made to register the model in the Model Registry using
+    `registered_model_name` (if provided).
     """
 
-    def __init__(self, output_dir: str = "model_artifacts"):
+    def __init__(self, output_dir: str = "model_artifacts", use_mlflow: bool = False, registered_model_name: str | None = None):
         self.output_dir = output_dir
         self.models = {}
         self.results = {}
         self.trained_models = {}
+        self.use_mlflow = use_mlflow
+        self.registered_model_name = registered_model_name
         os.makedirs(output_dir, exist_ok=True)
+
+        # Lazy import MLflow to keep the module import lightweight when not needed
+        if self.use_mlflow:
+            try:
+                import mlflow
+                import mlflow.sklearn
+                from mlflow.tracking import MlflowClient
+                from mlflow.models.signature import infer_signature
+
+                self.mlflow = mlflow
+                self.mlflow_sklearn = mlflow.sklearn
+                self.mlflow_client = MlflowClient()
+                self.infer_signature = infer_signature
+            except Exception as e:
+                print(f"Could not initialize MLflow: {e}")
+                self.use_mlflow = False
 
     def get_base_models(self) -> dict:
         """
@@ -109,7 +132,8 @@ class ModelTrainer:
 
     def train_model(self, name: str, model, X_train, y_train, X_val, y_val) -> dict:
         """
-        Train a single model and compute validation metrics.
+        Train a single model and compute validation metrics. If MLflow is enabled,
+        log parameters, metrics, artifacts, and attempt to register the model.
         """
         print(f"\n{'='*50}")
         print(f"Training: {name}")
@@ -132,7 +156,10 @@ class ModelTrainer:
         # Get probabilities if available
         y_proba = None
         if hasattr(model, "predict_proba"):
-            y_proba = model.predict_proba(X_val)[:, 1]
+            try:
+                y_proba = model.predict_proba(X_val)[:, 1]
+            except Exception:
+                y_proba = None
 
         # Compute metrics
         metrics = self.compute_metrics(y_val, y_pred, y_proba)
@@ -149,6 +176,73 @@ class ModelTrainer:
         if "roc_auc" in metrics:
             print(f"  ROC-AUC:   {metrics['roc_auc']:.4f}")
         print(f"  Train Time: {train_time:.2f}s")
+
+        # MLflow logging
+        if self.use_mlflow:
+            try:
+                run_name = f"{name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                with self.mlflow.start_run(run_name=run_name) as run:
+                    # Log model parameters (stringify non-primitive types)
+                    try:
+                        params = model.get_params()
+                        safe_params = {
+                            k: (v if isinstance(v, (int, float, str, bool)) else str(v))
+                            for k, v in params.items()
+                        }
+                        self.mlflow.log_params(safe_params)
+                    except Exception as e:
+                        print(f"  Could not log params: {e}")
+
+                    # Log scalar metrics
+                    try:
+                        for k, v in metrics.items():
+                            if isinstance(v, (int, float, np.floating, np.integer)):
+                                self.mlflow.log_metric(k, float(v))
+                    except Exception as e:
+                        print(f"  Could not log metrics: {e}")
+
+                    # Log confusion matrix as JSON artifact
+                    try:
+                        cm_path = os.path.join(self.output_dir, f"{name}_confusion_matrix.json")
+                        with open(cm_path, "w") as f:
+                            json.dump(metrics.get("confusion_matrix", []), f)
+                        self.mlflow.log_artifact(cm_path, artifact_path="confusion_matrices")
+                    except Exception as e:
+                        print(f"  Could not log confusion matrix: {e}")
+
+                    # Infer model signature for input/output schema
+                    try:
+                        signature = self.infer_signature(X_train, y_pred)
+                    except Exception:
+                        signature = None
+
+                    # Save and log model using mlflow.sklearn (register if name provided)
+                    try:
+                        self.mlflow_sklearn.log_model(
+                            sk_model=model,
+                            artifact_path="model",
+                            registered_model_name=self.registered_model_name,
+                            signature=signature,
+                        )
+                    except Exception as e:
+                        print(f"  mlflow.sklearn.log_model failed: {e}")
+                        try:
+                            tmpdir = tempfile.mkdtemp()
+                            tmp_path = os.path.join(tmpdir, f"{name}.joblib")
+                            joblib.dump(model, tmp_path)
+                            self.mlflow.log_artifact(tmp_path, artifact_path="models")
+                        except Exception as e2:
+                            print(f"  Could not log model artifact: {e2}")
+
+                    # Attach basic tags
+                    try:
+                        self.mlflow.set_tag("model_name", name)
+                        self.mlflow.set_tag("model_class", model.__class__.__name__)
+                    except Exception:
+                        pass
+
+            except Exception as e:
+                print(f"  MLflow logging failed: {e}")
 
         return metrics
 
@@ -241,6 +335,16 @@ class ModelTrainer:
             json.dump(serializable_results, f, indent=2)
 
         print(f"Saved results to {results_path}")
+
+        # If MLflow is enabled, log the saved artifacts
+        if self.use_mlflow:
+            try:
+                for name, path in saved_paths.items():
+                    self.mlflow.log_artifact(path, artifact_path="saved_models")
+                self.mlflow.log_artifact(results_path, artifact_path="saved_models")
+            except Exception as e:
+                print(f"  Could not log saved artifacts to MLflow: {e}")
+
         return saved_paths
 
     def load_model(self, name: str, prefix: str = "base_model"):

@@ -101,3 +101,11 @@ venv.bak/
 .vscode/
 *.swp
 *.swo
+
+# MLflow and Artifacts
+mlruns/
+model_artifacts/
+ensemble_artifacts/
+benchmark_results/
+*.joblib
+*.db

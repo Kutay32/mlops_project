@@ -110,6 +110,49 @@ cd prefect_flows
 python training_flow.py
 ```
 
+### MLflow Tracking & Model Registry
+
+This repository includes an MLflow server in `docker-compose.yml` for experiment tracking and the Model Registry.
+
+1. Start the MLflow server (or the whole stack):
+
+```bash
+# Start only MLflow server
+docker-compose up -d mlflow-server
+
+# Or start all services
+docker-compose up -d
+```
+
+2. Run training with MLflow tracking and optional registry registration:
+
+```bash
+MLFLOW_TRACKING_URI=http://localhost:5000 python scripts/train_with_mlflow.py \
+  --data-url "https://raw.githubusercontent.com/Nas-virat/Telco-Customer-Churn/main/Telco-Customer-Churn.csv" \
+  --registered-model-name "UltimateChurnModel"
+```
+
+3. Evaluate a registered model from the registry and log evaluation metrics:
+
+```bash
+MLFLOW_TRACKING_URI=http://localhost:5000 python scripts/eval_with_mlflow.py \
+  --registered-model-name "UltimateChurnModel" --stage "Staging" \
+  --data-url "https://raw.githubusercontent.com/Nas-virat/Telco-Customer-Churn/main/Telco-Customer-Churn.csv"
+```
+
+4. Promote a model version to Production (optionally archive previous Production versions):
+
+```bash
+MLFLOW_TRACKING_URI=http://localhost:5000 python scripts/promote_model.py \
+  --registered-model-name "UltimateChurnModel" --version 1 --target-stage Production --archive-existing
+```
+
+5. MLflow UI: http://localhost:5000
+
+> Quick demo: run `scripts/run_local_mlflow_demo.sh` to start MLflow, train a model, evaluate it, and promote the latest staging model to Production (uses Docker Compose and the example dataset).
+
+---
+
 ### 3. Check Services
 
 - **API**: http://localhost:8000

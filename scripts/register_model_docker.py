@@ -5,7 +5,10 @@ Compatible with MLflow 2.x
 import mlflow
 import mlflow.sklearn
 from mlflow.tracking import MlflowClient
+from mlflow.models.signature import infer_signature
 import joblib
+import numpy as np
+import pandas as pd
 import os
 import sys
 from datetime import datetime
@@ -55,12 +58,46 @@ def register_model():
         # Log metrics
         mlflow.log_metric("registered", 1)
         
-        # Log the model
+        # Create sample input for signature inference
+        # Define the expected input schema for churn prediction
+        sample_input = pd.DataFrame({
+            'gender': ['Male'],
+            'SeniorCitizen': [0],
+            'Partner': ['Yes'],
+            'Dependents': ['No'],
+            'tenure': [12],
+            'PhoneService': ['Yes'],
+            'MultipleLines': ['No'],
+            'InternetService': ['Fiber optic'],
+            'OnlineSecurity': ['No'],
+            'OnlineBackup': ['Yes'],
+            'DeviceProtection': ['No'],
+            'TechSupport': ['No'],
+            'StreamingTV': ['Yes'],
+            'StreamingMovies': ['Yes'],
+            'Contract': ['Month-to-month'],
+            'PaperlessBilling': ['Yes'],
+            'PaymentMethod': ['Electronic check'],
+            'MonthlyCharges': [70.35],
+            'TotalCharges': [844.2]
+        })
+
+        # Infer signature from sample prediction
+        try:
+            sample_pred = model.predict(sample_input)
+            signature = infer_signature(sample_input, sample_pred)
+        except Exception as sig_err:
+            print(f"⚠ Could not infer signature: {sig_err}")
+            signature = None
+
+        # Log the model with signature
         print("📦 Logging model to MLflow...")
         mlflow.sklearn.log_model(
             sk_model=model,
             artifact_path="model",
-            registered_model_name=model_name
+            registered_model_name=model_name,
+            signature=signature,
+            input_example=sample_input,
         )
         
         print(f"✓ Model logged successfully!")
