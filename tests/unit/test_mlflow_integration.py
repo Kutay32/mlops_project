@@ -55,3 +55,5 @@ def test_model_trainer_mlflow_logging(sample_data, tmp_path):
     assert fake_mlflow.log_params.called
     assert fake_mlflow.log_metric.called
     assert fake_mlflow_sklearn.log_model.called
+    # Verify that metrics were returned
+    assert metrics is not None
